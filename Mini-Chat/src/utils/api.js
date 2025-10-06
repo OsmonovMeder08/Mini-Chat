@@ -99,10 +99,10 @@ export const authAPI = {
 // API методы для пользователей
 export const userAPI = {
   // Получить текущего пользователя
-  getCurrentUser: () => api.get('/auth/user/'),
+  getCurrentUser: () => api.get('/auth/me/'),
   
   // Получить всех пользователей
-  getUsers: () => api.get('/users/'),
+  getUsers: () => api.get('/auth/users/'),
   
   // Получить пользователя по ID
   getUserById: (id) => api.get(`/users/${id}/`),
@@ -110,24 +110,8 @@ export const userAPI = {
   // Обновить профиль
   updateProfile: async (data) => {
     console.log('Updating profile with data:', data);
-    
-    // Попробуем разные возможные endpoints
-    const endpoints = ['/auth/user/', '/api/user/', '/users/profile/', '/profile/'];
-    
-    for (const endpoint of endpoints) {
-      try {
-        console.log(`Trying PATCH request to: ${endpoint}`);
-        const response = await api.patch(endpoint, data);
-        console.log(`Success with endpoint: ${endpoint}`, response.data);
-        return response;
-      } catch (error) {
-        console.log(`Failed with endpoint ${endpoint}:`, error.response?.status);
-        if (endpoint === endpoints[endpoints.length - 1]) {
-          // Это последний endpoint, прокидываем ошибку
-          throw error;
-        }
-      }
-    }
+    console.log('Making PATCH request to: /auth/profile/');
+    return api.patch('/auth/profile/', data);
   },
   
   // Обновить статус онлайн
@@ -137,28 +121,28 @@ export const userAPI = {
 // API методы для чатов
 export const chatAPI = {
   // Получить все чаты пользователя
-  getChats: () => api.get('/chats/'),
+  getChats: () => api.get('/chat/rooms/'),
   
   // Создать новый чат
-  createChat: (participantId) => api.post('/chats/', { participant_id: participantId }),
+  createChat: (participantId) => api.post('/chat/create-direct-chat/', { participant_id: participantId }),
   
   // Получить чат по ID
-  getChatById: (chatId) => api.get(`/chats/${chatId}/`),
+  getChatById: (chatId) => api.get(`/chat/rooms/${chatId}/`),
   
   // Получить сообщения чата
-  getChatMessages: (chatId, page = 1) => api.get(`/chats/${chatId}/messages/`, { params: { page } }),
+  getChatMessages: (chatId, page = 1) => api.get(`/chat/rooms/${chatId}/history/`, { params: { page } }),
   
   // Отправить сообщение
-  sendMessage: (chatId, content) => api.post(`/chats/${chatId}/messages/`, { content }),
+  sendMessage: (chatId, content) => api.post(`/chat/messages/`, { room: chatId, content }),
   
   // Пометить сообщения как прочитанные
-  markAsRead: (chatId) => api.post(`/chats/${chatId}/mark_read/`),
+  markAsRead: (chatId) => api.post(`/chat/rooms/${chatId}/mark_read/`),
   
   // Удалить сообщение
-  deleteMessage: (chatId, messageId) => api.delete(`/chats/${chatId}/messages/${messageId}/`),
+  deleteMessage: (chatId, messageId) => api.delete(`/chat/messages/${messageId}/`),
   
   // Редактировать сообщение
-  editMessage: (chatId, messageId, content) => api.patch(`/chats/${chatId}/messages/${messageId}/`, { content })
+  editMessage: (chatId, messageId, content) => api.patch(`/chat/messages/${messageId}/`, { content })
 };
 
 export default api;

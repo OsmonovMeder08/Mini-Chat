@@ -53,8 +53,8 @@ function App() {
             />
             
             {/* Перенаправления */}
-            <Route path="/" element={<BackendStatus />} />
-            <Route path="*" element={<Navigate to="/status" replace />} />
+            <Route path="/" element={<Navigate to="/chats" replace />} />
+            <Route path="*" element={<Navigate to="/chats" replace />} />
           </Routes>
         </div>
       </Router>

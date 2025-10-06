@@ -18,19 +18,18 @@ class SocketService {
     const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'ws://127.0.0.1:8000/ws';
     
     try {
-      this.socket = new WebSocket(`${SOCKET_URL}/chat/`);
+      // Передаем токен в URL для аутентификации
+      const wsUrl = `${SOCKET_URL}/chat/?token=${encodeURIComponent(token)}`;
+      console.log('Connecting to WebSocket:', wsUrl);
+      
+      this.socket = new WebSocket(wsUrl);
 
       this.socket.onopen = () => {
-        console.log('WebSocket connected');
+        console.log('WebSocket connected successfully');
         this.isConnected = true;
         this.reconnectAttempts = 0;
         this.isReconnecting = false;
         
-        this.send({
-          type: 'auth',
-          token: token
-        });
-
         this.restoreListeners();
       };
 
@@ -47,13 +46,27 @@ class SocketService {
         console.log('WebSocket disconnected:', event.code, event.reason);
         this.isConnected = false;
         
+        // Уведомляем об отключении
+        this.triggerEvent('connection_lost', { 
+          code: event.code, 
+          reason: event.reason 
+        });
+        
         if (!this.isReconnecting && this.reconnectAttempts < this.maxReconnectAttempts) {
           this.handleReconnect();
+        } else if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+          console.error('Max reconnection attempts reached');
+          this.triggerEvent('connection_failed', { 
+            message: 'Не удалось восстановить соединение с сервером' 
+          });
         }
       };
 
       this.socket.onerror = (error) => {
         console.error('WebSocket error:', error);
+        this.triggerEvent('connection_error', { 
+          error: error.message || 'WebSocket connection error' 
+        });
       };
 
     } catch (error) {
@@ -106,6 +119,11 @@ class SocketService {
           userId: payload.user_id,
           isOnline: payload.is_online
         });
+        break;
+        
+      case 'connection_established':
+        console.log('WebSocket connection established:', payload.message);
+        this.triggerEvent('connection_established', payload);
         break;
         
       case 'error':

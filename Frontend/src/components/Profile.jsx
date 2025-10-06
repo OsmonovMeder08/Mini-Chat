@@ -5,21 +5,39 @@ import { useAuth } from '../contexts/AuthContext';
 import { userAPI } from '../utils/api';
 
 const Profile = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
   
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   
   const [profileData, setProfileData] = useState({
     username: user?.username || '',
     email: user?.email || '',
-    firstName: user?.firstName || '',
-    lastName: user?.lastName || '',
-    bio: user?.bio || ''
+    firstName: user?.first_name || '',
+    lastName: user?.last_name || '',
+    bio: user?.profile?.bio || '' // Берем bio из профиля пользователя
   });
+
+  // Обновляем состояние при изменении данных пользователя
+  React.useEffect(() => {
+    console.log('User data updated:', user); // Отладка
+    
+    if (user) {
+      setProfileData({
+        username: user.username || '',
+        email: user.email || '',
+        firstName: user.first_name || '',
+        lastName: user.last_name || '',
+        bio: user.profile?.bio || '' // Берем bio из профиля пользователя
+      });
+    }
+  }, [user]);
+  
+  const [avatarPreview, setAvatarPreview] = useState(null);
 
   const handleInputChange = (e) => {
     setProfileData({
@@ -30,19 +48,93 @@ const Profile = () => {
     setSuccess('');
   };
 
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Проверка типа файла
+    if (!file.type.startsWith('image/')) {
+      setError('Пожалуйста, выберите изображение');
+      return;
+    }
+
+    // Проверка размера файла (максимум 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Размер файла не должен превышать 5MB');
+      return;
+    }
+
+    setUploadingAvatar(true);
+    setError('');
+
+    try {
+      // Показываем превью
+      const reader = new FileReader();
+      reader.onload = (e) => setAvatarPreview(e.target.result);
+      reader.readAsDataURL(file);
+
+      // Загружаем файл
+      const response = await userAPI.uploadAvatar(file);
+      console.log('Avatar uploaded successfully:', response.data);
+      setSuccess('Аватар успешно загружен');
+      
+      // Обновляем данные пользователя из базы данных
+      await refreshUser();
+      
+    } catch (error) {
+      console.error('Failed to upload avatar:', error);
+      setError('Ошибка загрузки аватара');
+      setAvatarPreview(null);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleAvatarUrlChange = async (url) => {
+    if (!url.trim()) return;
+
+    setUploadingAvatar(true);
+    setError('');
+
+    try {
+      const response = await userAPI.updateAvatarUrl(url);
+      console.log('Avatar URL updated successfully:', response.data);
+      setSuccess('Аватар успешно обновлен');
+      setAvatarPreview(url);
+      
+      // Обновляем данные пользователя из базы данных
+      await refreshUser();
+      
+    } catch (error) {
+      console.error('Failed to update avatar URL:', error);
+      setError('Ошибка обновления аватара');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setError('');
     setSuccess('');
 
     try {
-      console.log('Updating profile with data:', profileData);
-      const response = await userAPI.updateProfile(profileData);
+      // Преобразуем данные для API (camelCase -> snake_case)
+      const apiData = {
+        first_name: profileData.firstName || '',
+        last_name: profileData.lastName || '',
+        email: profileData.email || user?.email || '',
+        bio: profileData.bio || '' // Добавляем bio как отдельное поле
+      };
+      
+      console.log('Updating profile with data:', apiData);
+      const response = await userAPI.updateProfile(apiData);
       console.log('Profile update successful:', response.data);
       setSuccess('Профиль успешно обновлен');
       setIsEditing(false);
       
-      // Здесь можно обновить контекст пользователя, если нужно
+      // Обновляем данные пользователя из базы данных
+      await refreshUser();
       
     } catch (error) {
       console.error('Failed to update profile:', error);
@@ -58,6 +150,12 @@ const Profile = () => {
         errorMessage = error.response.data.message;
       } else if (error.response?.data?.detail) {
         errorMessage = error.response.data.detail;
+      } else if (error.response?.data) {
+        // Показываем ошибки валидации
+        const errors = Object.entries(error.response.data).map(([field, messages]) => 
+          `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`
+        ).join('; ');
+        errorMessage = `Ошибки валидации: ${errors}`;
       } else if (error.message) {
         errorMessage = `Ошибка соединения: ${error.message}`;
       }
@@ -72,13 +170,14 @@ const Profile = () => {
     setProfileData({
       username: user?.username || '',
       email: user?.email || '',
-      firstName: user?.firstName || '',
-      lastName: user?.lastName || '',
-      bio: user?.bio || ''
+      firstName: user?.first_name || '',
+      lastName: user?.last_name || '',
+      bio: user?.profile?.bio || '' // Берем bio из профиля пользователя
     });
     setIsEditing(false);
     setError('');
     setSuccess('');
+    setAvatarPreview(null);
   };
 
   const handleLogout = () => {
@@ -97,6 +196,67 @@ const Profile = () => {
     ];
     const index = username?.length % colors.length || 0;
     return colors[index];
+  };
+
+  // Функция для форматирования даты
+  const formatJoinDate = (dateString) => {
+    console.log('formatJoinDate called with:', dateString); // Отладка
+    
+    if (!dateString) {
+      return 'Недавно';
+    }
+    
+    try {
+      const date = new Date(dateString);
+      console.log('Parsed date:', date); // Отладка
+      
+      const months = [
+        'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+        'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'
+      ];
+      
+      const day = date.getDate();
+      const month = months[date.getMonth()];
+      const year = date.getFullYear();
+      
+      const formatted = `${day} ${month} ${year}`;
+      console.log('Formatted date:', formatted); // Отладка
+      
+      return formatted;
+    } catch (error) {
+      console.error('Error formatting date:', error); // Отладка
+      return 'Недавно';
+    }
+  };
+
+  // Функция для вычисления времени с регистрации
+  const getTimeSinceJoin = (dateString) => {
+    if (!dateString) {
+      return '';
+    }
+    
+    try {
+      const joinDate = new Date(dateString);
+      const now = new Date();
+      const diffTime = Math.abs(now - joinDate);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays < 1) {
+        return 'Сегодня';
+      } else if (diffDays === 1) {
+        return '1 день назад';
+      } else if (diffDays < 30) {
+        return `${diffDays} ${diffDays < 5 ? 'дня' : 'дней'} назад`;
+      } else if (diffDays < 365) {
+        const months = Math.floor(diffDays / 30);
+        return `${months} ${months === 1 ? 'месяц' : months < 5 ? 'месяца' : 'месяцев'} назад`;
+      } else {
+        const years = Math.floor(diffDays / 365);
+        return `${years} ${years === 1 ? 'год' : years < 5 ? 'года' : 'лет'} назад`;
+      }
+    } catch (error) {
+      return '';
+    }
   };
 
   return (
@@ -187,14 +347,36 @@ const Profile = () => {
           {/* Аватар и базовая информация */}
           <div className="relative px-8 py-12 border-b border-gray-200/50 bg-gradient-to-r from-blue-50/50 to-purple-50/50">
             <div className="flex items-center space-x-8">
-              {/* Аватар с градиентом и анимацией */}
+              {/* Аватар с возможностью загрузки */}
               <div className="relative group">
-                <div className={`w-32 h-32 rounded-3xl bg-gradient-to-br ${getAvatarGradient(user?.username)} flex items-center justify-center text-white text-4xl font-bold shadow-2xl transform transition-all duration-500 group-hover:scale-110 group-hover:rotate-3`}>
-                  {user?.username?.charAt(0).toUpperCase()}
+                {avatarPreview || user?.profile?.avatar ? (
+                  <img 
+                    src={avatarPreview || user?.profile?.avatar} 
+                    alt="Avatar" 
+                    className="w-32 h-32 rounded-3xl object-cover shadow-2xl transform transition-all duration-500 group-hover:scale-110 group-hover:rotate-3"
+                  />
+                ) : (
+                  <div className={`w-32 h-32 rounded-3xl bg-gradient-to-br ${getAvatarGradient(user?.username)} flex items-center justify-center text-white text-4xl font-bold shadow-2xl transform transition-all duration-500 group-hover:scale-110 group-hover:rotate-3`}>
+                    {user?.username?.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                
+                {/* Кнопка загрузки аватара */}
+                <div className="absolute inset-0 rounded-3xl bg-black/0 group-hover:bg-black/30 transition-all duration-300 flex items-center justify-center cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarChange}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    disabled={uploadingAvatar}
+                  />
+                  {uploadingAvatar ? (
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white opacity-0 group-hover:opacity-100"></div>
+                  ) : (
+                    <Camera className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transform scale-75 group-hover:scale-100 transition-all duration-300" />
+                  )}
                 </div>
-                <div className="absolute inset-0 rounded-3xl bg-black/0 group-hover:bg-black/10 transition-all duration-300 flex items-center justify-center">
-                  <Camera className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transform scale-75 group-hover:scale-100 transition-all duration-300" />
-                </div>
+                
                 {user?.isOnline !== undefined && (
                   <div className={`absolute -bottom-2 -right-2 w-8 h-8 rounded-full border-4 border-white flex items-center justify-center ${
                     user.isOnline 
@@ -214,6 +396,27 @@ const Profile = () => {
                   }
                 </h2>
                 <p className="text-xl text-gray-600 font-medium">@{profileData.username}</p>
+                
+                {/* Дата регистрации */}
+                <div className="flex items-center space-x-2 text-gray-500">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span className="text-sm font-medium">
+                    С нами с {formatJoinDate(user?.date_joined)}
+                  </span>
+                </div>
+                
+                {/* Время с регистрации */}
+                <div className="flex items-center space-x-2 text-gray-500">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h1m4 4h-1v-4h1M5 12h.01M4 6h16M4 6l1.342 1.342M20 6l-1.342 1.342M4 12l1.342-1.342M20 12l-1.342 1.342M4 18l1.342-1.342M20 18l-1.342-1.342" />
+                  </svg>
+                  <span className="text-sm font-medium">
+                    {getTimeSinceJoin(user?.date_joined)}
+                  </span>
+                </div>
+                
                 {profileData.bio && (
                   <p className="text-gray-500 text-lg leading-relaxed max-w-2xl">
                     {profileData.bio}
@@ -312,7 +515,7 @@ const Profile = () => {
               {[
                 { value: user?.totalChats || 0, label: 'Чатов', color: 'from-blue-500 to-cyan-500' },
                 { value: user?.totalMessages || 0, label: 'Сообщений', color: 'from-purple-500 to-pink-500' },
-                { value: user?.joinedAt ? new Date(user.joinedAt).toLocaleDateString() : 'Недавно', label: 'Дата регистрации', color: 'from-green-500 to-emerald-500' }
+                { value: formatJoinDate(user?.date_joined), label: 'Дата регистрации', color: 'from-green-500 to-emerald-500' }
               ].map((stat, index) => (
                 <div 
                   key={index}

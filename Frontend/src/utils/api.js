@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Базовый URL для API
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 // Настройка axios
 const api = axios.create({
@@ -9,6 +9,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 10000, // 10 секунд таймаут
 });
 
 // Interceptor для добавления токена
@@ -75,13 +76,18 @@ export const authAPI = {
   },
   
   logout: async () => {
-    const refreshToken = localStorage.getItem('refresh_token');
-    if (refreshToken) {
-      await api.post('/auth/logout/', { refresh: refreshToken });
+    try {
+      const refreshToken = localStorage.getItem('refresh_token');
+      if (refreshToken) {
+        await api.post('/auth/logout/', { refresh: refreshToken });
+      }
+    } catch (error) {
+      console.warn('Logout API call failed:', error);
+    } finally {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user');
     }
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('user');
   },
   
   refreshToken: async (refreshToken) => {
@@ -93,16 +99,36 @@ export const authAPI = {
 // API методы для пользователей
 export const userAPI = {
   // Получить текущего пользователя
-  getCurrentUser: () => api.get('/auth/user/'),
+  getCurrentUser: () => api.get('/auth/me/'),
   
   // Получить всех пользователей
-  getUsers: () => api.get('/users/'),
+  getUsers: () => api.get('/auth/users/'),
   
   // Получить пользователя по ID
   getUserById: (id) => api.get(`/users/${id}/`),
   
   // Обновить профиль
-  updateProfile: (data) => api.patch('/auth/user/', data),
+  updateProfile: (data) => {
+    console.log('Updating profile with data:', data);
+    return api.patch('/auth/profile/', data);
+  },
+  
+  // Загрузить аватар
+  uploadAvatar: (file) => {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    
+    return api.post('/auth/upload-avatar/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+  
+  // Обновить URL аватара
+  updateAvatarUrl: (avatarUrl) => {
+    return api.post('/auth/upload-avatar/', { avatar_url: avatarUrl });
+  },
   
   // Обновить статус онлайн
   updateOnlineStatus: (isOnline) => api.patch('/auth/user/', { is_online: isOnline })
@@ -111,34 +137,28 @@ export const userAPI = {
 // API методы для чатов
 export const chatAPI = {
   // Получить все чаты пользователя
-  getChats: () => api.get('/chats/'),
+  getChats: () => api.get('/chat/rooms/'),
   
   // Создать новый чат
-  createChat: (participantId) => api.post('/chats/', { participant_id: participantId }),
+  createChat: (participantId) => api.post('/chat/create-direct-chat/', { participant_id: participantId }),
   
   // Получить чат по ID
-  getChatById: (chatId) => api.get(`/chats/${chatId}/`),
+  getChatById: (chatId) => api.get(`/chat/rooms/${chatId}/`),
   
   // Получить сообщения чата
-  getChatMessages: (chatId, page = 1) => api.get(`/chats/${chatId}/messages/`, { 
-    params: { page }
-  }),
+  getChatMessages: (chatId, page = 1) => api.get(`/chat/rooms/${chatId}/history/`, { params: { page } }),
   
   // Отправить сообщение
-  sendMessage: (chatId, content) => api.post(`/chats/${chatId}/messages/`, { 
-    content 
-  }),
+  sendMessage: (chatId, content) => api.post(`/chat/messages/`, { room: chatId, content }),
   
   // Пометить сообщения как прочитанные
-  markAsRead: (chatId) => api.post(`/chats/${chatId}/mark_read/`),
+  markAsRead: (chatId) => api.post(`/chat/rooms/${chatId}/mark_read/`),
   
   // Удалить сообщение
-  deleteMessage: (chatId, messageId) => api.delete(`/chats/${chatId}/messages/${messageId}/`),
+  deleteMessage: (chatId, messageId) => api.delete(`/chat/messages/${messageId}/`),
   
   // Редактировать сообщение
-  editMessage: (chatId, messageId, content) => api.patch(`/chats/${chatId}/messages/${messageId}/`, {
-    content
-  })
+  editMessage: (chatId, messageId, content) => api.patch(`/chat/messages/${messageId}/`, { content })
 };
 
 export default api;

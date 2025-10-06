@@ -121,6 +121,11 @@ class SocketService {
         });
         break;
         
+      case 'connection_established':
+        console.log('WebSocket connection established:', payload.message);
+        this.triggerEvent('connection_established', payload);
+        break;
+        
       case 'error':
         console.error('WebSocket error:', payload.message);
         break;
