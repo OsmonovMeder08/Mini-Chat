@@ -30,8 +30,9 @@ const ChatRoom = () => {
     if (chatId) {
       fetchChatData();
       
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       if (token) {
+        console.log('Connecting to WebSocket with token:', token.substring(0, 10) + '...');
         socketService.connect(token);
         socketService.joinChat(chatId);
         
@@ -40,6 +41,9 @@ const ChatRoom = () => {
         socketService.on('user_typing', handleUserTyping);
         socketService.on('user_stopped_typing', handleUserStoppedTyping);
         socketService.on('user_status_changed', handleUserStatusChanged);
+        socketService.on('connection_lost', handleConnectionLost);
+        socketService.on('connection_error', handleConnectionError);
+        socketService.on('connection_failed', handleConnectionFailed);
       }
     }
 
@@ -51,6 +55,12 @@ const ChatRoom = () => {
         socketService.off('user_typing');
         socketService.off('user_stopped_typing');
         socketService.off('user_status_changed');
+        socketService.off('connection_lost');
+        socketService.off('connection_error');
+        socketService.off('connection_failed');
+        socketService.off('connection_lost');
+        socketService.off('connection_error');
+        socketService.off('connection_failed');
       }
     };
   }, [chatId]);
@@ -138,6 +148,21 @@ const ChatRoom = () => {
     }
   };
 
+  const handleConnectionLost = (data) => {
+    console.warn('WebSocket connection lost:', data);
+    setError('Соединение с сервером потеряно. Попытка переподключения...');
+  };
+
+  const handleConnectionError = (data) => {
+    console.error('WebSocket connection error:', data);
+    setError('Ошибка соединения с сервером');
+  };
+
+  const handleConnectionFailed = (data) => {
+    console.error('WebSocket connection failed:', data);
+    setError('Не удалось подключиться к серверу. Проверьте соединение.');
+  };
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -173,6 +198,7 @@ const ChatRoom = () => {
         )
       );
       
+      // Отправляем через WebSocket если подключен
       socketService.sendMessage(chatId, messageContent);
       
     } catch (error) {
@@ -194,13 +220,13 @@ const ChatRoom = () => {
     
     if (!isTyping) {
       setIsTyping(true);
-      socketService.emit('typing', { chatId });
+      socketService.sendTyping(true);
     }
     
     clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
       setIsTyping(false);
-      socketService.emit('stop_typing', { chatId });
+      socketService.sendTyping(false);
     }, 1000);
   };
 
@@ -429,22 +455,7 @@ const ChatRoom = () => {
         </form>
       </div>
 
-      {/* Стили для анимаций */}
-      <style jsx>{`
-        @keyframes message-in {
-          0% {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          100% {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        .animate-message-in {
-          animation: message-in 0.3s ease-out forwards;
-        }
-      `}</style>
+      {/* Стили для анимаций вынесены в CSS модуль */}
     </div>
   );
 };

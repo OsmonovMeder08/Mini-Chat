@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Базовый URL для API
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000/api';
 
 // Настройка axios
 const api = axios.create({
@@ -9,7 +9,6 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000, // 10 секунд таймаут
 });
 
 // Interceptor для добавления токена
@@ -76,18 +75,13 @@ export const authAPI = {
   },
   
   logout: async () => {
-    try {
-      const refreshToken = localStorage.getItem('refresh_token');
-      if (refreshToken) {
-        await api.post('/auth/logout/', { refresh: refreshToken });
-      }
-    } catch (error) {
-      console.warn('Logout API call failed:', error);
-    } finally {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      localStorage.removeItem('user');
+    const refreshToken = localStorage.getItem('refresh_token');
+    if (refreshToken) {
+      await api.post('/auth/logout/', { refresh: refreshToken });
     }
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user');
   },
   
   refreshToken: async (refreshToken) => {
@@ -108,27 +102,7 @@ export const userAPI = {
   getUserById: (id) => api.get(`/users/${id}/`),
   
   // Обновить профиль
-  updateProfile: async (data) => {
-    console.log('Updating profile with data:', data);
-    
-    // Попробуем разные возможные endpoints
-    const endpoints = ['/auth/user/', '/api/user/', '/users/profile/', '/profile/'];
-    
-    for (const endpoint of endpoints) {
-      try {
-        console.log(`Trying PATCH request to: ${endpoint}`);
-        const response = await api.patch(endpoint, data);
-        console.log(`Success with endpoint: ${endpoint}`, response.data);
-        return response;
-      } catch (error) {
-        console.log(`Failed with endpoint ${endpoint}:`, error.response?.status);
-        if (endpoint === endpoints[endpoints.length - 1]) {
-          // Это последний endpoint, прокидываем ошибку
-          throw error;
-        }
-      }
-    }
-  },
+  updateProfile: (data) => api.patch('/auth/user/', data),
   
   // Обновить статус онлайн
   updateOnlineStatus: (isOnline) => api.patch('/auth/user/', { is_online: isOnline })
@@ -146,10 +120,14 @@ export const chatAPI = {
   getChatById: (chatId) => api.get(`/chats/${chatId}/`),
   
   // Получить сообщения чата
-  getChatMessages: (chatId, page = 1) => api.get(`/chats/${chatId}/messages/`, { params: { page } }),
+  getChatMessages: (chatId, page = 1) => api.get(`/chats/${chatId}/messages/`, { 
+    params: { page }
+  }),
   
   // Отправить сообщение
-  sendMessage: (chatId, content) => api.post(`/chats/${chatId}/messages/`, { content }),
+  sendMessage: (chatId, content) => api.post(`/chats/${chatId}/messages/`, { 
+    content 
+  }),
   
   // Пометить сообщения как прочитанные
   markAsRead: (chatId) => api.post(`/chats/${chatId}/mark_read/`),
@@ -158,7 +136,9 @@ export const chatAPI = {
   deleteMessage: (chatId, messageId) => api.delete(`/chats/${chatId}/messages/${messageId}/`),
   
   // Редактировать сообщение
-  editMessage: (chatId, messageId, content) => api.patch(`/chats/${chatId}/messages/${messageId}/`, { content })
+  editMessage: (chatId, messageId, content) => api.patch(`/chats/${chatId}/messages/${messageId}/`, {
+    content
+  })
 };
 
 export default api;

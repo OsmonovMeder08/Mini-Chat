@@ -94,7 +94,7 @@ const RegisterForm = () => {
       return;
     }
 
-    const result = await register(formData.username, formData.password);
+    const result = await register(formData);
     
     if (result.success) {
       // Анимация успешной регистрации

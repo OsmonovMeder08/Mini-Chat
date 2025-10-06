@@ -5,9 +5,8 @@ class SocketService {
     this.listeners = new Map();
     this.currentRoom = null;
     this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 3;
+    this.maxReconnectAttempts = 5;
     this.reconnectDelay = 1000;
-    this.isReconnecting = false;
   }
 
   connect(token) {
@@ -15,21 +14,24 @@ class SocketService {
       return;
     }
 
-    const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'ws://127.0.0.1:8000/ws';
+    const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'ws://127.0.0.1:8000/ws';
     
     try {
-      // Передаем токен в URL для аутентификации
-      const wsUrl = `${SOCKET_URL}/chat/?token=${encodeURIComponent(token)}`;
-      console.log('Connecting to WebSocket:', wsUrl);
-      
-      this.socket = new WebSocket(wsUrl);
+      // Для Django Channels WebSocket не используем socket.io, а обычный WebSocket
+      this.socket = new WebSocket(`${SOCKET_URL}/chat/`);
 
       this.socket.onopen = () => {
-        console.log('WebSocket connected successfully');
+        console.log('WebSocket connected');
         this.isConnected = true;
         this.reconnectAttempts = 0;
-        this.isReconnecting = false;
         
+        // Отправляем токен для аутентификации
+        this.send({
+          type: 'auth',
+          token: token
+        });
+
+        // Восстанавливаем все подписки
         this.restoreListeners();
       };
 
@@ -45,28 +47,11 @@ class SocketService {
       this.socket.onclose = (event) => {
         console.log('WebSocket disconnected:', event.code, event.reason);
         this.isConnected = false;
-        
-        // Уведомляем об отключении
-        this.triggerEvent('connection_lost', { 
-          code: event.code, 
-          reason: event.reason 
-        });
-        
-        if (!this.isReconnecting && this.reconnectAttempts < this.maxReconnectAttempts) {
-          this.handleReconnect();
-        } else if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-          console.error('Max reconnection attempts reached');
-          this.triggerEvent('connection_failed', { 
-            message: 'Не удалось восстановить соединение с сервером' 
-          });
-        }
+        this.handleReconnect();
       };
 
       this.socket.onerror = (error) => {
         console.error('WebSocket error:', error);
-        this.triggerEvent('connection_error', { 
-          error: error.message || 'WebSocket connection error' 
-        });
       };
 
     } catch (error) {
@@ -138,22 +123,23 @@ class SocketService {
   }
 
   restoreListeners() {
+    // Если мы были в комнате, переподключаемся
     if (this.currentRoom) {
       this.joinChat(this.currentRoom);
     }
   }
 
   handleReconnect() {
-    this.isReconnecting = true;
-    
-    setTimeout(() => {
-      this.reconnectAttempts++;
-      console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-      const token = localStorage.getItem('access_token');
-      if (token) {
-        this.connect(token);
-      }
-    }, this.reconnectDelay * this.reconnectAttempts);
+    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      setTimeout(() => {
+        this.reconnectAttempts++;
+        console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+        const token = localStorage.getItem('access_token');
+        if (token) {
+          this.connect(token);
+        }
+      }, this.reconnectDelay * this.reconnectAttempts);
+    }
   }
 
   disconnect() {
@@ -162,7 +148,6 @@ class SocketService {
       this.socket = null;
       this.isConnected = false;
       this.currentRoom = null;
-      this.isReconnecting = false;
     }
   }
 
@@ -174,12 +159,15 @@ class SocketService {
     }
   }
 
+  // Присоединиться к чату
   joinChat(chatId) {
     this.currentRoom = parseInt(chatId);
     
+    // Для Django Channels нам нужно создать отдельное соединение для каждого чата
     this.disconnect();
     
-    const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'ws://127.0.0.1:8000/ws';
+    const token = localStorage.getItem('access_token');
+    const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'ws://127.0.0.1:8000/ws';
     
     try {
       this.socket = new WebSocket(`${SOCKET_URL}/chat/${chatId}/`);
@@ -188,7 +176,6 @@ class SocketService {
         console.log(`Joined chat room ${chatId}`);
         this.isConnected = true;
         this.reconnectAttempts = 0;
-        this.isReconnecting = false;
       };
 
       this.socket.onmessage = (event) => {
@@ -203,6 +190,7 @@ class SocketService {
       this.socket.onclose = (event) => {
         console.log(`Left chat room ${chatId}:`, event.code, event.reason);
         this.isConnected = false;
+        this.handleReconnect();
       };
 
       this.socket.onerror = (error) => {
@@ -214,6 +202,7 @@ class SocketService {
     }
   }
 
+  // Покинуть чат
   leaveChat() {
     if (this.currentRoom) {
       console.log(`Leaving chat room ${this.currentRoom}`);
@@ -222,6 +211,7 @@ class SocketService {
     }
   }
 
+  // Отправить сообщение
   sendMessage(chatId, content) {
     this.send({
       type: 'chat_message',
@@ -229,6 +219,7 @@ class SocketService {
     });
   }
 
+  // Отправить индикатор печати
   sendTyping(isTyping = true) {
     this.send({
       type: 'typing',
@@ -236,20 +227,24 @@ class SocketService {
     });
   }
 
+  // Отметить сообщения как прочитанные
   markAsRead() {
     this.send({
       type: 'mark_read'
     });
   }
 
+  // Подписаться на событие
   on(event, callback) {
     this.listeners.set(event, callback);
   }
 
+  // Отписаться от события
   off(event) {
     this.listeners.delete(event);
   }
 
+  // Эмуляция socket.io методов для совместимости
   emit(event, data) {
     switch (event) {
       case 'typing':
@@ -267,5 +262,6 @@ class SocketService {
   }
 }
 
+// Создаем единственный экземпляр
 const socketService = new SocketService();
 export default socketService;

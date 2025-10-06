@@ -21,7 +21,7 @@ const ChatList = () => {
     fetchChats();
     fetchUsers();
     
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('access_token');
     if (token) {
       socketService.connect(token);
       socketService.on('new_message', handleNewMessage);

@@ -10,6 +10,9 @@ import ChatsPage from './pages/ChatsPage';
 import ChatPage from './pages/ChatPage';
 import ProfilePage from './pages/ProfilePage';
 
+// Компонент для тестирования
+import TestRegistration from './components/TestRegistration';
+
 function App() {
   return (
     <AuthProvider>
@@ -19,6 +22,7 @@ function App() {
             {/* Публичные маршруты */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/test" element={<TestRegistration />} />
             
             {/* Защищенные маршруты */}
             <Route 

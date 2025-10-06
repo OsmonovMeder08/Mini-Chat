@@ -36,7 +36,9 @@ const Profile = () => {
     setSuccess('');
 
     try {
+      console.log('Updating profile with data:', profileData);
       const response = await userAPI.updateProfile(profileData);
+      console.log('Profile update successful:', response.data);
       setSuccess('Профиль успешно обновлен');
       setIsEditing(false);
       
@@ -44,7 +46,23 @@ const Profile = () => {
       
     } catch (error) {
       console.error('Failed to update profile:', error);
-      setError(error.response?.data?.message || 'Ошибка обновления профиля');
+      console.error('Error response data:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      console.error('Error request URL:', error.config?.url);
+      
+      let errorMessage = 'Ошибка обновления профиля';
+      
+      if (error.response?.status === 404) {
+        errorMessage = 'API endpoint не найден. Проверьте настройки сервера.';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      } else if (error.message) {
+        errorMessage = `Ошибка соединения: ${error.message}`;
+      }
+      
+      setError(errorMessage);
     } finally {
       setSaving(false);
     }
